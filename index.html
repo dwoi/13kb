@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<canvas id="c"></canvas>
+<script>
+var canvas = document.getElementById("c");
+canvas.width = window.innerWidth, canvas.height = window.innerHeight;
+canvas.style.display = "block", canvas.style.width = "100vw", canvas.style.height = "100vh";
+document.body.style.margin = "0";
+var ctx = canvas.getContext("2d");
+var x=50, y=50, speed=3;
+var root2 = Math.sqrt(2);
+var left, up, right, down;
+function draw() {
+	var scale = 5;
+	ctx.beginPath();
+	ctx.moveTo(x+scale*(1), y+scale*(1+root2));
+	ctx.lineTo(x+scale*(1), y-scale*(1+root2));
+	ctx.lineTo(x+scale*(1+root2), y-scale*(1));
+	ctx.lineTo(x-scale*(1+root2), y-scale*(1));
+	ctx.lineTo(x-scale*(1), y-scale*(1+root2));
+	ctx.lineTo(x-scale*(1), y+scale*(1+root2));
+	ctx.lineTo(x-scale*(1+root2), y+scale*(1));
+	ctx.lineTo(x+scale*(1+root2), y+scale*(1));
+	ctx.closePath();
+	ctx.stroke();
+}
+
+function clear() {
+	ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function move() {
+	if (up) {y -= speed;};
+	if (left) {x -= speed;};
+	if (right) {x += speed;};
+	if (down) {y += speed;};
+}
+
+function animate() {
+	clear();
+	move();
+	draw();
+	requestAnimationFrame(animate);
+}
+animate();
+document.addEventListener("keydown", function(e) {
+	switch (e.key) {
+		case "w": case "ArrowUp":
+			up = true;
+		break;
+		case "a": case "ArrowLeft":
+			left = true;
+		break;
+		case "d": case "ArrowRight":
+			right = true;
+		break;
+		case "s": case "ArrowDown":
+			down = true;
+		break;
+	}
+});
+document.addEventListener("keyup", function(e) {
+	switch (e.key) {
+		case "w": case "ArrowUp":
+			up = false;
+		break;
+		case "a": case "ArrowLeft":
+			left = false;
+		break;
+		case "d": case "ArrowRight":
+			right = false;
+		break;
+		case "s": case "ArrowDown":
+			down = false;
+		break;
+	}
+});
+</script>
+</html>
