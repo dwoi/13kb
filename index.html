@@ -11,6 +11,7 @@ var x=50, y=50, speed=3;
 var root2 = Math.sqrt(2);
 var left, up, right, down;
 var difficulty = "e";
+var shots = [];
 var corrupt = true, kill = false, destruction = false;
 var gun = "c";//c = corrupt gun, k = kill gun, d = destruction gun
 function draw() {
@@ -43,6 +44,10 @@ function animate() {
 	clear();
 	move();
 	draw();
+	for (var i=0;i<shots.length;i++) {
+		shots[i].move();
+		shots[i].draw();
+	}
 	requestAnimationFrame(animate);
 }
 animate();
@@ -88,11 +93,31 @@ document.addEventListener("keyup", function(e) {
 	}
 });
 canvas.addEventListener("mousedown", function(e) {
-	shoot(e.offsetX, e.offsetY);
+	var theta = Math.atan2(e.offsetY - y, e.offsetX - x);
+	var newX = Math.cos(theta);
+	var newY = Math.sin(theta);
+	new Shot(x, y, newX, newY);
 });
 
-function shoot(x, y) {
-
+function Shot(x, y, dirX, dirY) {
+	this.x = x;
+	this.y = y;
+	this.dirX = dirX;//use two variables so you don't have to do trig maths :)
+	this.dirY = dirY;
+	this.type = gun;
+	this.speed = 3;
+	shots.push(this);
+	this.move = function() {
+		this.x += this.dirX * speed;
+		this.y += this.dirY * speed;
+	};
+	this.draw = function() {
+		ctx.beginPath();
+		ctx.arc(this.x, this.y, 5, 0, Math.PI * 2);
+		ctx.fill();
+		ctx.closePath();
+	};
 }
+
 </script>
 </html>
