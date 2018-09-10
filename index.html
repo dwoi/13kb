@@ -102,6 +102,7 @@ document.addEventListener("keyup", function(e) {
 		break;
 	}
 });
+
 canvas.addEventListener("mousedown", function(e) {
 	var theta = Math.atan2(e.offsetY - y, e.offsetX - x);
 	var newX = Math.cos(theta);
@@ -192,6 +193,5 @@ function Packet(x, y, dirX, dirY) {
 		ctx.fillText(this.data, this.x+5, this.y+17);
 	};
 }
-
 </script>
 </html>
