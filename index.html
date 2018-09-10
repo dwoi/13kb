@@ -7,13 +7,17 @@ canvas.width = window.innerWidth, canvas.height = window.innerHeight;
 canvas.style.display = "block", canvas.style.width = "100vw", canvas.style.height = "100vh";
 document.body.style.margin = "0";
 var ctx = canvas.getContext("2d");
-var x=50, y=50, speed=3;
+var x=50, y=50, speed=2;
 var root2 = Math.sqrt(2);
 var left, up, right, down;
 var difficulty = "e";
 var shots = [];
+var servers = [];
+var packets = [];
 var corrupt = true, kill = false, destruction = false;
 var gun = "c";//c = corrupt gun, k = kill gun, d = destruction gun
+var server = new Image();
+server.src = "server.svg";
 function draw() {
 	var scale = 5;
 	ctx.beginPath();
@@ -47,6 +51,12 @@ function animate() {
 	for (var i=0;i<shots.length;i++) {
 		shots[i].move();
 		shots[i].draw();
+	}
+	for (var i=0;i<servers.length;i++) {
+		servers[i].draw();
+	}
+	for (var i=0;i<packets.length;i++) {
+		packets[i].draw();
 	}
 	requestAnimationFrame(animate);
 }
@@ -102,20 +112,84 @@ canvas.addEventListener("mousedown", function(e) {
 function Shot(x, y, dirX, dirY) {
 	this.x = x;
 	this.y = y;
+	this.radius = 5;
 	this.dirX = dirX;//use two variables so you don't have to do trig maths :)
 	this.dirY = dirY;
 	this.type = gun;
-	this.speed = 3;
+	this.speed = 4;
 	shots.push(this);
 	this.move = function() {
-		this.x += this.dirX * speed;
-		this.y += this.dirY * speed;
+		this.x += this.dirX * this.speed;
+		this.y += this.dirY * this.speed;
 	};
 	this.draw = function() {
 		ctx.beginPath();
-		ctx.arc(this.x, this.y, 5, 0, Math.PI * 2);
-		ctx.fill();
+		ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+		ctx.stroke();
 		ctx.closePath();
+		//draw separate icon
+	};
+	this.checkCollisions = function() {
+		for (var i=0;i<packets.length;i++) {
+			if (circleRectCollision(this, packets[i])) {
+				
+			}
+		}
+		for (var i=0;i<servers.length;i++) {
+			if (circleRectCollision(this, servers[i])) {
+				
+			}
+		}
+	};
+}
+
+//found in old code somewhere, not mine
+function circleRectCollision(c, r) {
+	var distX = Math.abs(c.x - r.x-r.width/2);
+	var distY = Math.abs(c.y - r.y-r.height/2);
+
+	if (distX > (r.width/2 + c.radius)) { return false; }
+	if (distY > (r.height/2 + c.radius)) { return false; }
+
+	if (distX <= (r.width/2)) { return true; } 
+	if (distY <= (r.height/2)) { return true; }
+
+	var dx=distX-r.width/2;
+	var dy=distY-r.height/2;
+	return (dx*dx+dy*dy<=(c.radius*c.radius));
+}
+
+function Server(x, y) {
+	this.x = x;
+	this.y = y;
+	this.width = 50;
+	this.height = 80;
+	servers.push(this);
+	this.draw = function() {
+		ctx.drawImage(server, this.x, this.y, this.width, this.height);
+	};
+}
+
+function Packet(x, y, dirX, dirY) {
+	this.x = x;
+	this.y = y;
+	this.width = 90;
+	this.height = 25;
+	this.data;//use even parity
+	packets.push(this);
+	this.getRandomData = function() {
+		this.data = Math.floor(Math.random()*256).toString(2);
+		while (this.data.length < 8) {
+			this.data = "0" + this.data;
+		}
+	};
+	this.getRandomData();
+	this.draw = function() {
+		ctx.beginPath();
+		ctx.rect(this.x, this.y, this.width, this.height);
+		ctx.stroke();
+		ctx.font = "16px Verdana";
+		ctx.fillText(this.data, this.x+5, this.y+17);
 	};
 }
 
