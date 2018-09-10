@@ -10,6 +10,9 @@ var ctx = canvas.getContext("2d");
 var x=50, y=50, speed=3;
 var root2 = Math.sqrt(2);
 var left, up, right, down;
+var difficulty = "e";
+var corrupt = true, kill = false, destruction = false;
+var gun = "c";//c = corrupt gun, k = kill gun, d = destruction gun
 function draw() {
 	var scale = 5;
 	ctx.beginPath();
@@ -57,6 +60,15 @@ document.addEventListener("keydown", function(e) {
 		case "s": case "ArrowDown":
 			down = true;
 		break;
+		case "1":
+			if (corrupt) {gun = "c"};
+		break;
+		case "2":
+			if (kill) {gun = "k"};
+		break;
+		case "3":
+			if (destruction) {gun = "d"};
+		break;
 	}
 });
 document.addEventListener("keyup", function(e) {
@@ -75,8 +87,12 @@ document.addEventListener("keyup", function(e) {
 		break;
 	}
 });
-document.addEventListener("mousedown", function(e) {
-	
+canvas.addEventListener("mousedown", function(e) {
+	shoot(e.offsetX, e.offsetY);
 });
+
+function shoot(x, y) {
+
+}
 </script>
 </html>
