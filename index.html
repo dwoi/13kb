@@ -7,7 +7,7 @@ canvas.width = window.innerWidth, canvas.height = window.innerHeight;
 canvas.style.display = "block", canvas.style.width = "100vw", canvas.style.height = "100vh";
 document.body.style.margin = "0";
 var ctx = canvas.getContext("2d");
-var x=50, y=50, speed=2;
+var x=window.innerWidth/2, y=window.innerHeight/2, speed=2;
 var root2 = Math.sqrt(2);
 var left, up, right, down;
 var difficulty = "e";
@@ -21,8 +21,11 @@ var server = new Image();
 server.src = "server.svg";
 var stage = 1;
 var cooldown = false;
+var startTime = Date.now();
+var time;
 function draw() {
-	var scale = 20;
+	ctx.lineWidth = 4;
+	var scale = 10;
 	ctx.beginPath();
 	ctx.moveTo(x+scale*(1), y+scale*(1+root2));
 	ctx.lineTo(x+scale*(1), y-scale*(1+root2));
@@ -62,9 +65,11 @@ function start() {
 			break;
 	}
 	for (var i=0;i<num;i++) {
-		var cX = getRandomInt(0, canvas.width);
+		//var cX = getRandomInt(0, canvas.width);
+		var cX = window.innerWidth - 100;
 		var cY = getRandomInt(0, canvas.height);
-		var sX = getRandomInt(0, canvas.width);
+		//var sX = getRandomInt(0, canvas.width);
+		var sX = 10;
 		var sY = getRandomInt(0, canvas.height);
 		var client = new Client(cX, cY);
 		var server = new Server(sX, sY, client);
@@ -86,6 +91,7 @@ function move() {
 }
 
 function animate() {
+	time = Date.now() - startTime;
 	clear();
 	move();
 	draw();
@@ -102,8 +108,8 @@ function animate() {
 	}
 	for (var i=0;i<packets.length;i++) {
 		packets[i].move();
-		packets[i].checkDestination();
 		packets[i].draw();
+		packets[i].checkDestination();
 	}
 	requestAnimationFrame(animate);
 }
@@ -228,7 +234,7 @@ function Shot(x, y, dirX, dirY) {
 			if (circleRectCollision(this, packets[i])) {
 				switch(this.type) {
 					case "c":
-						packets[i].getRandomData();
+						packets[i].getRandomData(false);
 						this.delete();
 						return;
 					case "k":
@@ -283,12 +289,13 @@ function Server(x, y, client) {
 		var theta = Math.atan2(this.client.y - this.y, this.client.x - this.x);
 		var newX = Math.cos(theta);
 		var newY = Math.sin(theta);
-		new Packet(this.x, this.y, newX, newY, this.client);
+		new Packet(this.x, this.y, newX, newY, this.client, this);
 	};
 }
 
 function drawCorrupt(x, y, scale) {
 	//add rotation later?
+	ctx.lineWidth = 2;
 	x -= scale*3/2;
 	y -= scale;
 	ctx.beginPath();
@@ -300,32 +307,46 @@ function drawCorrupt(x, y, scale) {
 }
 
 function drawKill(x, y) {
+	ctx.lineWidth = 2;
+	x -= scale*3/2;
+	y -= scale;
+	ctx.beginPath();
 	
+	ctx.stroke();
 }
 
 function drawDestruction(x, y) {
 	
 }
 
-function Packet(x, y, dirX, dirY, destClient) {
+function Packet(x, y, dirX, dirY, destClient, server) {
 	this.x = x;
 	this.y = y;
 	this.width = 90;
 	this.height = 25;
 	this.speed = 1;
+	this.health = 2;
 	this.dirX = dirX;
 	this.dirY = dirY;
 	this.destClient = destClient;
+	this.server = server;
 	this.pause = false;
 	packets.push(this);
-	this.getRandomData = function() {
-		this.data = Math.floor(Math.random()*256).toString(2);
+	this.getRandomData = function(good) {
+		if (good) {
+			do {
+				this.data = Math.floor(Math.random()*256).toString(2);
+			} while(!checkEvenParity(this.data));
+		} else {
+			this.data = Math.floor(Math.random()*256).toString(2);
+		}
+		
 		while (this.data.length < 8) {
 			this.data = "0" + this.data;
 		}
 		this.origData = this.data;
 	};
-	this.getRandomData();
+	this.getRandomData(true);
 	this.draw = function() {
 		ctx.beginPath();
 		ctx.rect(this.x, this.y, this.width, this.height);
@@ -346,21 +367,36 @@ function Packet(x, y, dirX, dirY, destClient) {
 	this.checkDestination = function() {
 		if (Math.hypot(this.destClient.x - this.x, this.destClient.y - this.y) < this.speed * 2) {
 			if(this.data == this.origData) {
-			
+				this.destClient.status = "g";
 			} else {
-				
+				if(checkEvenParity(this.data)) {
+					this.destClient.status = "b";
+				} else {
+					this.destClient.status = "f";
+					this.server.sendPacket();
+				}
 			}
+			this.delete();
 		}
 	};
 }
 
 function checkEvenParity(data) {
-	
+	var count = 0;
+	for (var i of data) {
+		if (i == "1") {
+			count++;
+		}
+	}
+	if (count % 2 == 0) {
+		return true;
+	}
+	return false;
 }
 
 //really basic checksum
 function checkChecksum(data) {
-
+	
 }
 
 function Client(x, y) {
@@ -368,7 +404,8 @@ function Client(x, y) {
 	this.y = y;
 	this.width = 90;
 	this.height = 50;
-	this.status = "w";//show different icon for waiting=refreshing icon, received=green, failed=red
+	this.health = 20;
+	this.status = "w";//show different icon for waiting=refreshing icon, good-received=green, bad-received=explode, failed=red
 	clients.push(this);
 	this.draw = function() {
 		ctx.beginPath();
@@ -379,7 +416,34 @@ function Client(x, y) {
 		ctx.moveTo(this.x + this.width/2 - 20, this.y + this.height + 10);
 		ctx.lineTo(this.x + this.width/2 + 20, this.y + this.height + 10);
 		ctx.stroke();
-		
+		//draw icon
+		switch(this.status) {
+			case "w":
+				ctx.beginPath();
+				ctx.arc(Math.sin(time/50) * 20 + this.x + this.width/2, Math.cos(time/50) * 20 + this.y + this.height/2, 5, 0, Math.PI*2);
+				ctx.fill();
+				break;
+		}
+	};
+	this.changeStatus = function(status) {
+		switch(status) {
+			case "f":
+				setTimeout(function() {
+					this.delete();
+				}, 3000);
+				break;
+			case "g":
+				setTimeout(function() {
+					
+				}, 3000);
+				break;
+			case "b":
+				setTimeout(function() {
+					this.status = "w";
+				}, 3000);
+				break;
+		}
+		this.status = status;
 	};
 }
 
