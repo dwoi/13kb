@@ -14,12 +14,15 @@ var difficulty = "e";
 var shots = [];
 var servers = [];
 var packets = [];
+var clients = [];
 var corrupt = true, kill = false, destruction = false;
 var gun = "c";//c = corrupt gun, k = kill gun, d = destruction gun
 var server = new Image();
 server.src = "server.svg";
+var stage = 1;
+var cooldown = false;
 function draw() {
-	var scale = 5;
+	var scale = 20;
 	ctx.beginPath();
 	ctx.moveTo(x+scale*(1), y+scale*(1+root2));
 	ctx.lineTo(x+scale*(1), y-scale*(1+root2));
@@ -31,7 +34,45 @@ function draw() {
 	ctx.lineTo(x+scale*(1+root2), y+scale*(1));
 	ctx.closePath();
 	ctx.stroke();
+	switch(gun) {
+		case "c":
+			drawCorrupt(x+scale, y+scale, scale);
+			break;
+		case "k":
+			drawKill(x+scale, y+scale, scale);
+			break;
+		case "d":
+			drawDestruction(x+scale, y+scale, scale);
+			break;
+	}
 }
+
+function start() {
+	//set up some servers and clients, and link them up
+	var num;
+	switch(difficulty) {
+		case "e":
+			num = 5;
+			break;
+		case "m":
+			num = 10;
+			break;
+		case "h":
+			num = 15;
+			break;
+	}
+	for (var i=0;i<num;i++) {
+		var cX = getRandomInt(0, canvas.width);
+		var cY = getRandomInt(0, canvas.height);
+		var sX = getRandomInt(0, canvas.width);
+		var sY = getRandomInt(0, canvas.height);
+		var client = new Client(cX, cY);
+		var server = new Server(sX, sY, client);
+		server.sendPacket();
+	}
+	animate();
+}
+start();
 
 function clear() {
 	ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -51,16 +92,22 @@ function animate() {
 	for (var i=0;i<shots.length;i++) {
 		shots[i].move();
 		shots[i].draw();
+		shots[i].checkCollisions();
 	}
 	for (var i=0;i<servers.length;i++) {
 		servers[i].draw();
 	}
+	for (var i=0;i<clients.length;i++) {
+		clients[i].draw();
+	}
 	for (var i=0;i<packets.length;i++) {
+		packets[i].move();
+		packets[i].checkDestination();
 		packets[i].draw();
 	}
 	requestAnimationFrame(animate);
 }
-animate();
+
 document.addEventListener("keydown", function(e) {
 	switch (e.key) {
 		case "w": case "ArrowUp":
@@ -104,20 +151,51 @@ document.addEventListener("keyup", function(e) {
 });
 
 canvas.addEventListener("mousedown", function(e) {
-	var theta = Math.atan2(e.offsetY - y, e.offsetX - x);
-	var newX = Math.cos(theta);
-	var newY = Math.sin(theta);
-	new Shot(x, y, newX, newY);
+	if (!cooldown) {
+		var theta = Math.atan2(e.offsetY - y, e.offsetX - x);
+		var newX = Math.cos(theta);
+		var newY = Math.sin(theta);
+		new Shot(x, y, newX, newY);
+		cooldown = true;
+		var amount;
+		switch(gun) {
+			case "c":
+				amount = 1000;
+				break;
+			case "k":
+				amount = 2000;
+				break;
+			case "d":
+				amount = 3000;
+				break;
+		}
+		setTimeout(function() {
+			cooldown = false;
+		}, amount);
+	}
 });
 
 function Shot(x, y, dirX, dirY) {
 	this.x = x;
 	this.y = y;
-	this.radius = 5;
+	this.radius = 8;
 	this.dirX = dirX;//use two variables so you don't have to do trig maths :)
 	this.dirY = dirY;
 	this.type = gun;
-	this.speed = 4;
+	switch(this.type) {
+		case "c":
+			this.speed = 8;
+			this.damage = 0;
+			break;
+		case "k":
+			this.speed = 4;
+			this.damage = 2;
+			break;
+		case "d":
+			this.speed = 2;
+			this.damage = 4;
+			break;
+	}
 	shots.push(this);
 	this.move = function() {
 		this.x += this.dirX * this.speed;
@@ -129,11 +207,41 @@ function Shot(x, y, dirX, dirY) {
 		ctx.stroke();
 		ctx.closePath();
 		//draw separate icon
+		switch(this.type) {
+			case "c":
+				drawCorrupt(this.x + this.radius, this.y + this.radius, this.radius);
+				break;
+			case "k":
+				drawKill(this.x + this.radius, this.y + this.radius, this.radius);
+				break;
+			case "d":
+				drawDestruction(this.x + this.radius, this.y + this.radius, this.radius);
+				break;
+		}
+	};
+	this.delete = function() {
+		var index = shots.indexOf(this);
+		shots.splice(index, 1);
 	};
 	this.checkCollisions = function() {
 		for (var i=0;i<packets.length;i++) {
 			if (circleRectCollision(this, packets[i])) {
-				
+				switch(this.type) {
+					case "c":
+						packets[i].getRandomData();
+						this.delete();
+						return;
+					case "k":
+						
+						
+						this.delete();
+						return;
+					case "d":
+						
+						
+						this.delete();
+						return;
+				}
 			}
 		}
 		for (var i=0;i<servers.length;i++) {
@@ -160,29 +268,62 @@ function circleRectCollision(c, r) {
 	return (dx*dx+dy*dy<=(c.radius*c.radius));
 }
 
-function Server(x, y) {
+function Server(x, y, client) {
 	this.x = x;
 	this.y = y;
+	this.client = client;
 	this.width = 50;
 	this.height = 80;
+	this.health = 10;
 	servers.push(this);
 	this.draw = function() {
 		ctx.drawImage(server, this.x, this.y, this.width, this.height);
 	};
+	this.sendPacket = function() {
+		var theta = Math.atan2(this.client.y - this.y, this.client.x - this.x);
+		var newX = Math.cos(theta);
+		var newY = Math.sin(theta);
+		new Packet(this.x, this.y, newX, newY, this.client);
+	};
 }
 
-function Packet(x, y, dirX, dirY) {
+function drawCorrupt(x, y, scale) {
+	//add rotation later?
+	x -= scale*3/2;
+	y -= scale;
+	ctx.beginPath();
+	ctx.arc(x, y, scale/2, 0, Math.PI);
+	ctx.stroke();
+	ctx.beginPath();
+	ctx.arc(x+scale, y, scale/2, Math.PI, 0);
+	ctx.stroke();
+}
+
+function drawKill(x, y) {
+	
+}
+
+function drawDestruction(x, y) {
+	
+}
+
+function Packet(x, y, dirX, dirY, destClient) {
 	this.x = x;
 	this.y = y;
 	this.width = 90;
 	this.height = 25;
-	this.data;//use even parity
+	this.speed = 1;
+	this.dirX = dirX;
+	this.dirY = dirY;
+	this.destClient = destClient;
+	this.pause = false;
 	packets.push(this);
 	this.getRandomData = function() {
 		this.data = Math.floor(Math.random()*256).toString(2);
 		while (this.data.length < 8) {
 			this.data = "0" + this.data;
 		}
+		this.origData = this.data;
 	};
 	this.getRandomData();
 	this.draw = function() {
@@ -192,6 +333,61 @@ function Packet(x, y, dirX, dirY) {
 		ctx.font = "16px Verdana";
 		ctx.fillText(this.data, this.x+5, this.y+17);
 	};
+	this.delete = function() {
+		var index = packets.indexOf(this);
+		packets.splice(index, 1);
+	};
+	this.move = function() {
+		if (!this.pause) {
+			this.x += this.dirX * this.speed;
+			this.y += this.dirY * this.speed;
+		}
+	};
+	this.checkDestination = function() {
+		if (Math.hypot(this.destClient.x - this.x, this.destClient.y - this.y) < this.speed * 2) {
+			if(this.data == this.origData) {
+			
+			} else {
+				
+			}
+		}
+	};
+}
+
+function checkEvenParity(data) {
+	
+}
+
+//really basic checksum
+function checkChecksum(data) {
+
+}
+
+function Client(x, y) {
+	this.x = x;
+	this.y = y;
+	this.width = 90;
+	this.height = 50;
+	this.status = "w";//show different icon for waiting=refreshing icon, received=green, failed=red
+	clients.push(this);
+	this.draw = function() {
+		ctx.beginPath();
+		ctx.rect(this.x, this.y, this.width, this.height);
+		ctx.lineWidth = 5;
+		ctx.moveTo(this.x + this.width/2, this.y + this.height);
+		ctx.lineTo(this.x + this.width/2, this.y + this.height + 10);
+		ctx.moveTo(this.x + this.width/2 - 20, this.y + this.height + 10);
+		ctx.lineTo(this.x + this.width/2 + 20, this.y + this.height + 10);
+		ctx.stroke();
+		
+	};
+}
+
+//from mdn - https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/random
+function getRandomInt(min, max) {
+	min = Math.ceil(min);
+	max = Math.floor(max);
+	return Math.floor(Math.random() * (max - min)) + min; 
 }
 </script>
 </html>
