@@ -3,7 +3,6 @@
 <canvas id="c"></canvas>
 <script>
 var canvas = document.getElementById("c");
-canvas.width = window.innerWidth, canvas.height = window.innerHeight;
 canvas.style.display = "block", canvas.style.width = "100vw", canvas.style.height = "100vh";
 document.body.style.margin = "0";
 var ctx = canvas.getContext("2d");
@@ -23,6 +22,9 @@ var stage = 1;
 var cooldown = false;
 var startTime = Date.now();
 var time;
+var mainText;
+var health = 2;
+var interval;
 function draw() {
 	ctx.lineWidth = 4;
 	var scale = 10;
@@ -50,6 +52,27 @@ function draw() {
 	}
 }
 
+function focusout() {
+	for (var i=0;i<servers.length;i++) {
+		clearInterval(servers[i].interval);
+	}
+}
+window.addEventListener("blur", focusout);
+
+function focusin() {
+	for (var i=0;i<servers.length;i++) {
+		servers[i].startSending();
+	}
+}
+
+window.addEventListener("focus", focusin);
+
+function resize() {
+	canvas.width = window.innerWidth, canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener("resize", resize);
+
 function start() {
 	//set up some servers and clients, and link them up
 	var num;
@@ -73,11 +96,29 @@ function start() {
 		var sY = getRandomInt(0, canvas.height);
 		var client = new Client(cX, cY);
 		var server = new Server(sX, sY, client);
-		server.sendPacket();
 	}
 	animate();
 }
 start();
+
+function startStage2() {
+	stage = 2;
+	kill = true;
+	
+}
+
+function startStage3() {
+	stage = 3;
+	destruction = true;
+}
+
+function writeText(text) {
+	ctx.font = "30px Verdana";
+	var size = ctx.measureText(text);
+	ctx.fillStyle = "rgba(1, 1, 1, 0.7)";
+	ctx.fillText(text, window.innerWidth/2 - size.width/2, 50);
+	ctx.fillStyle = "black";
+}
 
 function clear() {
 	ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -92,8 +133,8 @@ function move() {
 
 function animate() {
 	time = Date.now() - startTime;
-	clear();
 	move();
+	clear();
 	draw();
 	for (var i=0;i<shots.length;i++) {
 		shots[i].move();
@@ -110,6 +151,17 @@ function animate() {
 		packets[i].move();
 		packets[i].draw();
 		packets[i].checkDestination();
+	}
+	
+	if (stage == 1 && time > 20000) {
+		startStage2();
+	}
+	if (stage == 2 && time > 40000) {
+		startStage3();
+	}
+	
+	if (mainText) {
+		writeText(mainText);
 	}
 	requestAnimationFrame(animate);
 }
@@ -235,6 +287,7 @@ function Shot(x, y, dirX, dirY) {
 				switch(this.type) {
 					case "c":
 						packets[i].getRandomData(false);
+						packets[i].changed = true;
 						this.delete();
 						return;
 					case "k":
@@ -281,15 +334,26 @@ function Server(x, y, client) {
 	this.width = 50;
 	this.height = 80;
 	this.health = 10;
+	this.waitTime = 7000;
+	var self = this;
+	this.startSending = function() {
+		setTimeout(function() {
+			self.sendPacket();
+			self.interval = setInterval(function() {
+				self.sendPacket();
+			}, self.waitTime);
+		}, getRandomInt(0, 6000));
+	};
+	this.startSending();
 	servers.push(this);
 	this.draw = function() {
 		ctx.drawImage(server, this.x, this.y, this.width, this.height);
 	};
-	this.sendPacket = function() {
+	this.sendPacket = function(data) {
 		var theta = Math.atan2(this.client.y - this.y, this.client.x - this.x);
 		var newX = Math.cos(theta);
 		var newY = Math.sin(theta);
-		new Packet(this.x, this.y, newX, newY, this.client, this);
+		new Packet(this.x, this.y, newX, newY, this.client, this, this.data);
 	};
 }
 
@@ -306,7 +370,7 @@ function drawCorrupt(x, y, scale) {
 	ctx.stroke();
 }
 
-function drawKill(x, y) {
+function drawKill(x, y, scale) {
 	ctx.lineWidth = 2;
 	x -= scale*3/2;
 	y -= scale;
@@ -319,38 +383,70 @@ function drawDestruction(x, y) {
 	
 }
 
-function Packet(x, y, dirX, dirY, destClient, server) {
+function Packet(x, y, dirX, dirY, destClient, server, data) {
 	this.x = x;
 	this.y = y;
 	this.width = 90;
 	this.height = 25;
-	this.speed = 1;
+	this.speed = 1.5;
 	this.health = 2;
+	this.damage = 10;
 	this.dirX = dirX;
 	this.dirY = dirY;
 	this.destClient = destClient;
 	this.server = server;
 	this.pause = false;
+	this.changed = false;
 	packets.push(this);
-	this.getRandomData = function(good) {
-		if (good) {
-			do {
+	if (stage == 1) {
+		this.getRandomData = function(good) {
+			if (good) {
+				do {
+					this.data = Math.floor(Math.random()*256).toString(2);
+				} while(!checkEvenParity(this.data));
+			} else {
 				this.data = Math.floor(Math.random()*256).toString(2);
-			} while(!checkEvenParity(this.data));
-		} else {
-			this.data = Math.floor(Math.random()*256).toString(2);
-		}
-		
-		while (this.data.length < 8) {
-			this.data = "0" + this.data;
-		}
-		this.origData = this.data;
-	};
-	this.getRandomData(true);
+			}
+			
+			while (this.data.length < 8) {
+				this.data = "0" + this.data;
+			}
+		};
+	} else {
+		this.getRandomData = function(good) {
+			if (good) {
+				this.data = Math.floor(Math.random()*9999999).toString(10);
+				var num = 0;
+				for (i of this.data) {
+					num += parseInt(i);
+				}
+				this.data += num % 10;
+			} else {
+				this.data = Math.floor(Math.random()*99999999).toString(10);
+			}
+			
+			while (this.data.length < 8) {
+				this.data = "0" + this.data;
+			}
+		};
+	}
+	if (data) {
+		this.data = data;
+	} else {
+		this.getRandomData(true);
+	}
+	this.origData = this.data;
 	this.draw = function() {
+		ctx.lineWidth = 2;
 		ctx.beginPath();
 		ctx.rect(this.x, this.y, this.width, this.height);
 		ctx.stroke();
+		if (this.changed) {
+			var temp = ctx.fillStyle;
+			ctx.fillStyle = "#E129A9";
+			ctx.fill();
+			ctx.fillStyle = temp;
+		}
 		ctx.font = "16px Verdana";
 		ctx.fillText(this.data, this.x+5, this.y+17);
 	};
@@ -370,10 +466,11 @@ function Packet(x, y, dirX, dirY, destClient, server) {
 				this.destClient.status = "g";
 			} else {
 				if(checkEvenParity(this.data)) {
-					this.destClient.status = "b";
+					var cli = this.destClient;
+					cli.health -= this.damage;
 				} else {
 					this.destClient.status = "f";
-					this.server.sendPacket();
+					this.server.sendPacket(this.origData);
 				}
 			}
 			this.delete();
@@ -404,26 +501,44 @@ function Client(x, y) {
 	this.y = y;
 	this.width = 90;
 	this.height = 50;
-	this.health = 20;
+	this.maxHealth = 40;
+	this.health = this.maxHealth;
 	this.status = "w";//show different icon for waiting=refreshing icon, good-received=green, bad-received=explode, failed=red
 	clients.push(this);
 	this.draw = function() {
 		ctx.beginPath();
 		ctx.rect(this.x, this.y, this.width, this.height);
-		ctx.lineWidth = 5;
+		ctx.lineWidth = 6;
 		ctx.moveTo(this.x + this.width/2, this.y + this.height);
 		ctx.lineTo(this.x + this.width/2, this.y + this.height + 10);
 		ctx.moveTo(this.x + this.width/2 - 20, this.y + this.height + 10);
 		ctx.lineTo(this.x + this.width/2 + 20, this.y + this.height + 10);
 		ctx.stroke();
 		//draw icon
-		switch(this.status) {
-			case "w":
-				ctx.beginPath();
-				ctx.arc(Math.sin(time/50) * 20 + this.x + this.width/2, Math.cos(time/50) * 20 + this.y + this.height/2, 5, 0, Math.PI*2);
-				ctx.fill();
-				break;
-		}
+		var hp = (this.width-6) * this.health / this.maxHealth 
+		ctx.beginPath();
+		ctx.rect(this.x+3, this.y, hp, this.height);
+		var temp = ctx.fillStyle;
+		ctx.fillStyle = "red";
+		ctx.fill();
+		ctx.fillStyle = temp;
+		
+		ctx.beginPath();
+		ctx.arc(Math.sin(time/50) * 20 + this.x + this.width/2, Math.cos(time/50) * 20 + this.y + this.height/2, 5, 0, Math.PI*2);
+		ctx.fill();
+
+		/*ctx.beginPath();
+		ctx.rect(this.x, this.y, this.width, this.height);
+		var temp = ctx.fillStyle;
+		ctx.fillStyle = "green";
+		ctx.fill();
+		ctx.fillStyle = temp;*/
+
+		
+	};
+	this.delete = function() {
+		var index = clients.indexOf(this);
+		clients.splice(index, 1);
 	};
 	this.changeStatus = function(status) {
 		switch(status) {
